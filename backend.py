@@ -4,8 +4,8 @@ from pydantic import BaseModel
 import asyncio
 import random
 import uuid
-import datetime
 
+# Initialize FastAPI with lifespan explicitly
 app = FastAPI()
 
 # Allow frontend to communicate with the backend
@@ -44,33 +44,55 @@ STOIC_PHRASES = [
     {"id": str(uuid.uuid4()), "phrase": "Freedom is the only worthy goal in life. It is won by disregarding things that lie beyond our control. — Epictetus"},
 ]
 
-# Function to map current time to a specific Stoic phrase with added randomness
-def get_stoic_phrase_based_on_time():
-    current_time = datetime.datetime.now()
-    
-    # Use only hour and minute for the seed calculation
-    random_seed = (current_time.hour * 60 + current_time.minute + random.randint(0, 1000)) % len(STOIC_PHRASES)
-    
-    # Select the phrase based on the random seed
-    return STOIC_PHRASES[random_seed]
-
 # Store pinned phrases
 user_pinned_phrases = []  # List of dictionaries with 'id' and 'phrase'
+active_connections = []  # List of WebSocket connections
+current_phrase = random.choice(STOIC_PHRASES)  # Initial phrase to send
 
 class PinRequest(BaseModel):
     id: str
     phrase: str
 
+# Background task to update the phrase every 30 seconds
+async def update_phrase_periodically():
+    global current_phrase
+    while True:
+        # Pick a random quote from the list
+        current_phrase = random.choice(STOIC_PHRASES)
+        
+        # Broadcast the updated phrase to all connected clients
+        for connection in active_connections:
+            await connection.send_json(current_phrase)
+        
+        # Wait 30 seconds before updating again
+        await asyncio.sleep(30)
+
+# FastAPI's lifespan management
+@app.on_event("startup")
+async def start_background_task():
+    # Start the background task when the server starts
+    asyncio.create_task(update_phrase_periodically())
+
+@app.on_event("shutdown")
+async def shutdown():
+    # Here you could implement graceful shutdown if necessary
+    pass
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    active_connections.append(websocket)
+    
     try:
+        # Send the current phrase to the client as soon as they connect
+        await websocket.send_json(current_phrase)
+        
+        # Keep the connection alive, waiting for client messages (if any)
         while True:
-            # Send a random Stoic phrase
-            phrase = get_stoic_phrase_based_on_time()
-            await websocket.send_text(phrase)
-            await asyncio.sleep(10)
+            await asyncio.sleep(100)
+
     except WebSocketDisconnect:
+        active_connections.remove(websocket)
         print("Client disconnected")
 
 @app.post("/pin")
