@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stoic Wisdom</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        #phrase {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            margin: 5px 0;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Stoic Wisdom</h1>
+    <div id="phrase">Connecting to server...</div>
+    <button id="pinButton" disabled>Pin Phrase</button>
+    <h2>Pinned Phrases</h2>
+    <ul id="pinnedList"></ul>
+
+    <script>
+        const ws = new WebSocket("ws://localhost:8000/ws");
+        const phraseDiv = document.getElementById("phrase");
+        const pinButton = document.getElementById("pinButton");
+        const pinnedList = document.getElementById("pinnedList");
+
+        let currentQuote = null; // Object to hold the current quote with 'id' and 'phrase'
+
+        // Handle incoming WebSocket messages
+        ws.onmessage = (event) => {
+            currentQuote = JSON.parse(event.data); // Parse JSON object
+            phraseDiv.textContent = currentQuote.phrase; // Display the phrase
+            pinButton.disabled = false; // Enable the pin button
+        };
+
+        // Pin current quote
+        pinButton.addEventListener("click", async () => {
+            if (!currentQuote) return;
+
+            // Send pin request to the backend
+            const response = await fetch("http://localhost:8000/pin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(currentQuote), // Send 'id' and 'phrase'
+            });
+
+            const result = await response.json();
+            if (response.ok && result.message === "Phrase pinned successfully!") {
+                const listItem = document.createElement("li");
+                listItem.textContent = currentQuote.phrase;
+                pinnedList.appendChild(listItem);
+                pinButton.disabled = true; // Prevent re-pinning the same phrase
+            } else {
+                alert(result.message); // Show message if already pinned
+            }
+        });
+
+        // Load pinned phrases on page load
+        window.onload = async () => {
+            const response = await fetch("http://localhost:8000/pinned");
+            const data = await response.json();
+            data.pinned_phrases.forEach((quote) => {
+                const listItem = document.createElement("li");
+                listItem.textContent = quote.phrase; // Display only the phrase
+                pinnedList.appendChild(listItem);
+            });
+        };
+    </script>
+</body>
+
+</html>
