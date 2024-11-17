@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import asyncio
 import random
 import uuid
+import datetime
 
 app = FastAPI()
 
@@ -43,6 +44,16 @@ STOIC_PHRASES = [
     {"id": str(uuid.uuid4()), "phrase": "Freedom is the only worthy goal in life. It is won by disregarding things that lie beyond our control. — Epictetus"},
 ]
 
+# Function to map current time to a specific Stoic phrase with added randomness
+def get_stoic_phrase_based_on_time():
+    current_time = datetime.datetime.now()
+    
+    # Use only hour and minute for the seed calculation
+    random_seed = (current_time.hour * 60 + current_time.minute + random.randint(0, 1000)) % len(STOIC_PHRASES)
+    
+    # Select the phrase based on the random seed
+    return STOIC_PHRASES[random_seed]
+
 # Store pinned phrases
 user_pinned_phrases = []  # List of dictionaries with 'id' and 'phrase'
 
@@ -56,9 +67,9 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             # Send a random Stoic phrase
-            random_quote = random.choice(STOIC_PHRASES)
-            await websocket.send_json(random_quote)
-            await asyncio.sleep(30)
+            phrase = get_stoic_phrase_based_on_time()
+            await websocket.send_text(phrase)
+            await asyncio.sleep(10)
     except WebSocketDisconnect:
         print("Client disconnected")
 
